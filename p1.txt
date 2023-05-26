@@ -1,0 +1,31 @@
+CREATE EXTENSION pg_trgm;
+
+-- create table
+CREATE TABLE articles (
+	body text,
+	body_indexed text
+);
+
+
+DELETE FROM articles;
+DROP INDEX articles_search_idx;
+
+
+-- populate table with data
+INSERT INTO articles (body)
+SELECT
+	md5(random()::text)
+from (
+	SELECT * FROM generate_series(1,10000000) AS id
+) AS x;
+update articles set body_indexed = body;
+
+
+-- add an index
+CREATE INDEX articles_search_idx ON articles USING gin(body_indexed gin_trgm_ops);
+
+
+-- test
+EXPLAIN ANALYZE SELECT count(*) FROM articles where body ilike '%abc%';
+set enable_seqscan = false;
+EXPLAIN ANALYZE SELECT count(*) FROM articles where body_indexed ilike'%abc%';

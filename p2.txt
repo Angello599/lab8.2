@@ -1,0 +1,55 @@
+-- tokenizacion
+select ts_parse('default', 'con la fe del cuto');
+
+-- lexema
+select ts_lexize('spanish_stem', 'programador');
+select ts_lexize('spanish_stem', 'programacion');
+select ts_lexize('spanish_stem', 'compañere');
+
+-- vector: stopwords, lexema
+select to_tsvector('spanish', 'la fe del cuto no muere');
+
+
+---------------------- p2
+select * from film;
+
+select fulltext, to_tsvector('english', title) || to_tsvector('english', description) from film;
+
+
+-- new column
+alter table film add column full_text tsvector;
+update film set full_text = T.full_text
+from (
+	select 	film_id, setweight(to_tsvector('english', title), 'A') 			||
+			setweight(to_tsvector('english', description), 'B')
+			as full_text
+from film
+) T
+where T.film_id = film.film_id;
+
+create index full_text_idx on film using gin (full_text);
+
+-- query
+-- 32.352 ms
+explain analyze
+select title, description
+from film
+where 	(title || description) ilike '%man%' 
+		or (title || description) ilike '%woman%';
+
+-- 0.331 ms
+explain analyze
+select title, description
+from film
+where to_tsquery('english', 'Man | Woman') @@ full_text;
+
+
+
+set enable_seqscan = false;
+explain analyze
+select title, description, ts_rank_cd(full_text, query) as rank
+from film, to_tsquery('english', 'man | woman') query
+where query @@ full_text
+order by rank desc
+limit 64;
+
